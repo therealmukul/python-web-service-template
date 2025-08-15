@@ -5,6 +5,7 @@ A production-ready Python web service template built with FastAPI. This template
 ## Features
 
 - **FastAPI Framework**: Modern, fast web framework for building APIs
+- **Modern Dependency Management**: Uses uv for fast, reliable package management
 - **Health Check Endpoints**: Built-in health monitoring for load balancers
 - **Structured Logging**: Configurable logging with JSON output for production
 - **Error Handling**: Comprehensive error handling with structured responses
@@ -18,25 +19,31 @@ A production-ready Python web service template built with FastAPI. This template
 ### Prerequisites
 
 - Python 3.9+
-- pip or poetry for dependency management
+- uv (modern Python package manager)
 
 ### Installation
 
-1. Clone the repository:
+1. Install uv (if not already installed):
+```bash
+# On macOS and Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# On Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Or using pip
+pip install uv
+```
+
+2. Clone the repository:
 ```bash
 git clone <repository-url>
 cd python-web-service-template
 ```
 
-2. Create and activate a virtual environment:
+3. Install dependencies and create virtual environment:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 4. Create environment configuration:
@@ -45,16 +52,18 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
+The project uses `pyproject.toml` for dependency management and project configuration. Dependencies are automatically installed when you run `uv sync`.
+
 ### Running the Service
 
 #### Development Mode
 ```bash
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 #### Production Mode
 ```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 #### Using the convenience script
@@ -101,7 +110,9 @@ Once the service is running, you can access:
 │   ├── conftest.py          # Pytest fixtures
 │   └── test_health.py       # Health endpoint tests
 ├── .env.example             # Environment variables template
-├── requirements.txt         # Dependencies
+├── pyproject.toml           # Project configuration and dependencies
+├── uv.lock                  # Lock file for reproducible builds
+├── requirements.txt         # Dependencies (exported for compatibility)
 └── README.md               # This file
 ```
 
@@ -133,19 +144,59 @@ Run the test suite:
 
 ```bash
 # Run all tests
-python -m pytest
+uv run pytest
 
 # Run with coverage
-python -m pytest --cov=app
+uv run pytest --cov=app
 
 # Run specific test file
-python -m pytest tests/test_health.py
+uv run pytest tests/test_health.py
 
 # Run with verbose output
-python -m pytest -v
+uv run pytest -v
 ```
 
 ## Development
+
+### Dependency Management
+
+Add new dependencies:
+```bash
+# Add a production dependency
+uv add fastapi
+
+# Add a development dependency
+uv add --dev pytest
+
+# Remove a dependency
+uv remove package-name
+
+# Update all dependencies
+uv sync --upgrade
+```
+
+### Requirements.txt Export
+
+For compatibility with Docker builds and CI/CD systems that expect requirements.txt, this project includes automated export mechanisms:
+
+```bash
+# Export production dependencies only (for Docker)
+make export-requirements
+
+# Export all dependencies including dev dependencies
+make export-dev-requirements
+
+# Manual export using uv directly
+uv export --no-dev --format requirements-txt > requirements.txt
+uv export --format requirements-txt > requirements-dev.txt
+```
+
+The exported requirements.txt files are automatically updated when pyproject.toml changes through:
+- **Pre-commit hooks**: Automatically sync requirements.txt when pyproject.toml is modified
+- **GitHub Actions**: CI workflow that updates requirements.txt on pushes to main/develop branches
+- **Manual export**: Use the Makefile commands or Python script
+
+**Important**: Do not edit requirements.txt manually - it's auto-generated from pyproject.toml
 
 ### Adding New Endpoints
 
@@ -163,26 +214,87 @@ The project follows Python best practices:
 - Docstrings for functions and classes
 - Structured error handling
 
+### Troubleshooting
+
+#### uv not found
+If you get "command not found: uv", make sure uv is installed and in your PATH:
+```bash
+# Check if uv is installed
+uv --version
+
+# If not installed, install it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+#### Virtual environment issues
+If you encounter virtual environment issues, you can recreate it:
+```bash
+# Remove existing environment
+rm -rf .venv
+
+# Recreate and sync
+uv sync
+```
+
 ## Deployment
 
 ### Docker (Recommended)
 
-Create a `Dockerfile`:
+This project includes Docker support with both uv-optimized and traditional pip-compatible configurations.
 
-```dockerfile
-FROM python:3.9-slim
+#### Quick Start with Docker
 
-WORKDIR /app
+```bash
+# Build and run with Docker Compose (recommended)
+docker-compose up
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app/ ./app/
-
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Or build and run manually
+docker build -t python-web-service-template .
+docker run -p 8000:8000 python-web-service-template
 ```
+
+#### Available Docker Configurations
+
+1. **`Dockerfile`** (Default - Hybrid approach)
+   - Automatically detects and uses uv if available
+   - Falls back to pip for maximum compatibility
+   - Uses exported requirements.txt for reliable builds
+   - Multi-stage build for optimized production images
+
+2. **`Dockerfile.uv`** (uv-optimized)
+   - Native uv integration for fastest builds
+   - Direct pyproject.toml support
+   - Uses `uv run` for application execution
+
+#### Docker Compose Services
+
+```bash
+# Standard Docker build
+docker-compose up web
+
+# uv-optimized build
+docker-compose up web-uv
+
+# Run both for comparison
+docker-compose up
+```
+
+#### Testing Docker Setup
+
+Validate your Docker configuration:
+
+```bash
+# Validate Dockerfile syntax and best practices
+python3 scripts/validate_docker.py
+
+# Run comprehensive Docker tests (without Docker daemon)
+python3 scripts/test_docker_mock.py
+
+# Full Docker build and runtime test (requires Docker)
+./scripts/test_docker.sh
+```
+
+For detailed Docker documentation, see [docs/docker.md](docs/docker.md).
 
 ### Environment Variables for Production
 

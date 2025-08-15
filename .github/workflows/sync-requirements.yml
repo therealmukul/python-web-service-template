@@ -1,0 +1,65 @@
+name: Sync Requirements
+
+on:
+  push:
+    paths:
+      - 'pyproject.toml'
+    branches:
+      - main
+      - develop
+  pull_request:
+    paths:
+      - 'pyproject.toml'
+
+jobs:
+  sync-requirements:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+        
+    - name: Set up Python
+      run: uv python install
+      
+    - name: Export requirements.txt
+      run: |
+        # Export production requirements
+        uv export --no-dev --format requirements-txt > requirements.txt
+        
+        # Add header comments
+        echo "# This file is auto-generated from pyproject.toml" > temp_req.txt
+        echo "# Do not edit manually - run 'make export-requirements' to update" >> temp_req.txt
+        echo "# Or use 'uv export --no-dev --format requirements-txt > requirements.txt'" >> temp_req.txt
+        echo "" >> temp_req.txt
+        cat requirements.txt >> temp_req.txt
+        mv temp_req.txt requirements.txt
+        
+    - name: Check for changes
+      id: verify-changed-files
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Commit changes
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add requirements.txt
+        git commit -m "Auto-update requirements.txt from pyproject.toml"
+        
+    - name: Push changes
+      if: steps.verify-changed-files.outputs.changed == 'true'
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ github.ref }}
